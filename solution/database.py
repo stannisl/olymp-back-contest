@@ -7,7 +7,7 @@ def start_engine() -> Engine:
     try:
         engine = create_engine(f"postgresql://{POSTGRES_USERNAME}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DATABASE}")
     except Exception as e:
-        raise ConnectionError("Не удалось подлкючиться к Базе Данных.")
+        raise ConnectionError("Не удалось подлкючиться к Базе Данных.", e)
     return engine
 
 

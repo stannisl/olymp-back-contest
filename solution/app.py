@@ -5,6 +5,7 @@ from sqlalchemy import text
 
 
 app = Flask(__name__)
+engine = start_engine()
 
 @app.route('/api/ping', methods=['GET'])
 def send():
@@ -45,5 +46,4 @@ def get_country_by_alpha2(alpha2):
 
 
 if __name__ == "__main__":
-    engine = start_engine()
     app.run(host=SERVER_ADDRESS, port=SERVER_PORT, debug=True)
