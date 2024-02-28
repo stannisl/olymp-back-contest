@@ -1,4 +1,3 @@
-import psycopg2
 from config import POSTGRES_CONN, DEBUG, POSTGRES_USERNAME, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DATABASE
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import sessionmaker
