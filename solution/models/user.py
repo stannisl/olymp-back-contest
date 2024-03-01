@@ -1,5 +1,6 @@
-from db import db
 from sqlalchemy_utils import PhoneNumberType
+
+from db import db
 
 
 class UserModel(db.Model):

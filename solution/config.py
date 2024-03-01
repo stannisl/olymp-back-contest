@@ -1,6 +1,6 @@
-from dotenv import load_dotenv, find_dotenv
 import os
 
+from dotenv import find_dotenv, load_dotenv
 
 load_dotenv()
 e = os.getenv
@@ -17,5 +17,4 @@ JWT_SECRET_KEY = e("JWT_SECRET_KEY")
 
 metaobj = ...
 
-DEBUG = e('DEBUG', default=True)
-
+DEBUG = e("DEBUG", default=True)
