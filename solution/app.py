@@ -1,16 +1,24 @@
+from datetime import timedelta
+
 from flask import Flask, jsonify, request
+from flask_jwt_extended import JWTManager
 from flask_migrate import Migrate
+from flask_smorest import Api
 from sqlalchemy import text
 
-import config
-from config import (POSTGRES_DATABASE, POSTGRES_HOST, POSTGRES_PASSWORD,
-                    POSTGRES_PORT, POSTGRES_USERNAME)
+from config import (
+    JWT_SECRET_KEY,
+    POSTGRES_DATABASE,
+    POSTGRES_HOST,
+    POSTGRES_PASSWORD,
+    POSTGRES_PORT,
+    POSTGRES_USERNAME,
+    SERVER_ADDRESS,
+    SERVER_PORT,
+)
 from db import db
-
-# from models.countries import CountriesModel
-# from database import start_session, start_engine
-
-# from resources.countries import blp as ContriesBlueprint
+from resources.profile import blp as ProfileBlueprint
+from resources.user import blp as UserBlueprint
 
 
 def create_app() -> Flask:
@@ -21,26 +29,53 @@ def create_app() -> Flask:
     app.config["API_TITLE"] = "Stores REST API"
     app.config["API_VERSION"] = "v1"
     app.config["OPENAPI_VERSION"] = "3.0.3"
-    app.config["OPENAPI_URL_PREFIX"] = "/"
-    app.config["OPENAPI_SWAGGER_UI_PATH"] = "/swagger-ui"
-    app.config["JWT_SECRET_KEY"] = config.JWT_SECRET_KEY
+    app.config["JWT_SECRET_KEY"] = JWT_SECRET_KEY
+    app.config["JWT_ACCES_TOKEN_EXPIRES"] = timedelta(hours=12)
     app.config["SQLALCHEMY_DATABASE_URI"] = (
         f"postgresql://{POSTGRES_USERNAME}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DATABASE}"
     )
     db.init_app(app)
     migrate = Migrate(app, db)
 
-    from flask_jwt_extended import JWTManager
-    from flask_smorest import Api
-
-    from resources.user import blp as UserBlueprint
+    # with app.app_context():
+    #     with db.engine.connect() as connection:
+    #                 res = connection.execute(
+    #                     text(f"SELECT DISTINCT alpha2 FROM countries")).all()
+    #                 print("RU" in [i[0] for i in res])
 
     api = Api(app=app)
     jwt = JWTManager(app=app)
 
     api.register_blueprint(UserBlueprint)
+    api.register_blueprint(ProfileBlueprint)
 
-    # 6 часов попыток засунуть в схему не увенчались успехом :(, зато старался миш.
+    @jwt.expired_token_loader
+    def expired_token_callback(jwt_header, jwt_payload):
+        return (
+            jsonify({"message": "The token has expired.", "error": "token_expired"}),
+            401,
+        )
+
+    @jwt.invalid_token_loader
+    def invalid_token_callback(error):
+        return (
+            jsonify({"message": "Signature verification failed.", "error": "invalid_token"}),
+            401,
+        )
+
+    @jwt.unauthorized_loader
+    def missing_token_callback(error):
+        return (
+            jsonify(
+                {
+                    "description": "Request does not contain an access token.",
+                    "error": "authorization_required",
+                }
+            ),
+            401,
+        )
+
+    # 6 часов попыток засунуть в схему не увенчались успехом :(.
     @app.route("/api/countries", methods=["GET"])
     def list_countries():
         if not request.args.get("region") == None:
@@ -114,4 +149,4 @@ def create_app() -> Flask:
 
 if __name__ == "__main__":
     app = create_app()
-    app.run(host=config.SERVER_ADDRESS, port=config.SERVER_PORT, debug=True)
+    app.run(host=SERVER_ADDRESS, port=SERVER_PORT, debug=True)
