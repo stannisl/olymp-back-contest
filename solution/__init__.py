@@ -3,4 +3,5 @@ __all__ = [
     "app",
     "config",
     "schemas",
+    "blocklist",
 ]

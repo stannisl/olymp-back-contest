@@ -1,7 +1,9 @@
+import psycopg2
+import sqlalchemy
 from flask import jsonify
 from flask.views import MethodView
 from flask_jwt_extended import create_access_token
-from flask_smorest import Blueprint, abort
+from flask_smorest import Blueprint
 from passlib.hash import pbkdf2_sha256
 from sqlalchemy import text
 
@@ -17,25 +19,25 @@ class UserRegister(MethodView):
     @blp.arguments(RegisterSchema)
     def post(self, request):
         """Register a user"""
-        # if UserModel.query.filter(UserModel.login == request["login"]).all():
-        #     abort(409, message="Registration data is not unique.")
-        # if UserModel.query.filter(UserModel.email == request["email"]).all():
-        #     abort(409, message="Registration data is not unique.")
-        # if UserModel.query.filter(UserModel.phone == request["phone"]).all():
-        #     abort(409, message="Registration data is not unique.")
-
-        if UserModel.query.filter(
-            UserModel.phone == request["phone"] or UserModel.email == request["email"] or UserModel.login == request["login"]
-        ).all():
-            abort(409, message="Registration data is not unique.")
+        try:
+            if (
+                (UserModel.query.filter(UserModel.phone == request["phone"])).all()
+                or (UserModel.query.filter(UserModel.email == request["email"])).all()
+                or (UserModel.query.filter(UserModel.login == request["login"])).all()
+            ):
+                return jsonify({"reason": "Registration data is not unique."}), 409
+        except sqlalchemy.exc.ProgrammingError:
+            return jsonify({"reason": "Migrations are not applied."}), 500
+        except sqlalchemy.exc.IntegrityError:
+            return jsonify({"reason": "Registration data is not unique."}), 409
 
         with db.engine.connect() as connection:
             res = connection.execute(text(f"SELECT DISTINCT alpha2 FROM countries")).all()
             if request["countryCode"].upper() not in [i[0] for i in res]:
-                abort(400, message="Invalid country code.")
+                return jsonify({"reason": "Invalid country code"}), 400
 
         if (len(request["login"]) < 1) or (len(request["phone"]) < 1) or (len(request["email"]) < 1):
-            abort(400, message="Invalid form data")
+            return jsonify({"reason": "Invalid form data"}), 400
 
         user = UserModel(
             login=request["login"],
@@ -71,10 +73,13 @@ class UserRegister(MethodView):
 class UserLogin(MethodView):
     @blp.arguments(LoginSchema)
     def post(self, request):
-        user = UserModel.query.filter(UserModel.login == request["login"]).first()
+        try:
 
+            user = UserModel.query.filter(UserModel.login == request["login"]).first()
+        except Exception as e:
+            return jsonify({"message": "Invalid creds"}), 401
         if user and pbkdf2_sha256.verify(request["password"], user.password):
             access_token = create_access_token(identity=user.id)
             return jsonify({"token": access_token}), 200
 
-        abort(401, message="Invalid credentials.")
+        return jsonify({"message": "Invalid creds"}), 401

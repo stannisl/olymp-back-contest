@@ -23,3 +23,8 @@ class ProfileUpdateSchema(Schema):
     isPublic = fields.Bool(required=False)
     phone = fields.Str(required=False)
     image = fields.Str(required=False)
+
+
+class ChangePasswordSchema(Schema):
+    oldPassword = fields.Str(required=True)
+    newPassword = fields.Str(required=True)

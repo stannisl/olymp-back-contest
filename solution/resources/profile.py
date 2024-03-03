@@ -1,14 +1,14 @@
-import flask_jwt_extended
 from flask import jsonify
 from flask.views import MethodView
-from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required, verify_jwt_in_request
-from flask_smorest import Blueprint, abort
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
+from flask_smorest import Blueprint
 from passlib.hash import pbkdf2_sha256
 from sqlalchemy import text
 
+from blocklist import BLOCKLIST
 from db import db
 from models import UserModel
-from schemas import ProfileUpdateSchema
+from schemas import ChangePasswordSchema, ProfileUpdateSchema
 
 blp = Blueprint("Profiles", "profile", url_prefix="/api/", description="Действия с пользователями")
 
@@ -22,7 +22,7 @@ class UserProfile(MethodView):
             user = UserModel.query.filter(UserModel.login == login).first()
 
         except Exception as e:
-            abort(403, message=f"Запрашиваемый пользователь не существует или у вас нет доступа к нему.")
+            return jsonify({"reason": "Пользователь не найден"}), 403
 
         response = {
             "login": user.login,
@@ -40,7 +40,7 @@ class UserProfile(MethodView):
 
         if not user.is_public == True:
             if not user.id == jwt_id:
-                abort(403, message=f"Запрашиваемый пользователь не существует или у вас нет доступа к нему.")
+                return jsonify({"reason": "Запрашиваемый пользователь не существует или у вас нет доступа к нему."}), 403
             else:
                 return response
         else:
@@ -56,7 +56,7 @@ class UpdateProfile(MethodView):
         try:
             user = UserModel.query.filter(UserModel.id == jwt_id).first()
         except Exception as e:
-            abort(401, message="Переданный токен не существует либо некорректен.")
+            return jsonify({"reason": "Переданный токен не существует либо некорректен."}), 401
 
         response = {
             "login": user.login,
@@ -80,7 +80,7 @@ class UpdateProfile(MethodView):
         with db.engine.connect() as connection:
             res = connection.execute(text(f"SELECT DISTINCT alpha2 FROM countries")).all()
             if request["countryCode"].upper() not in [i[0] for i in res]:
-                abort(400, message="Invalid country code.")
+                return jsonify({"reason": "Invalid country code."}), 400
 
         user = UserModel.query.filter(UserModel.id == jwt_id).first()
 
@@ -96,14 +96,14 @@ class UpdateProfile(MethodView):
         if UserModel.query.filter(
             UserModel.phone == request["phone"] or UserModel.email == request["email"] or UserModel.login == request["login"]
         ).all():
-            abort(409, message="New data is not unique.")
+            return jsonify({"reason": "New data is not unique."}), 409
 
         try:
             db.session.add(user)
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            abort(400, message="db did not accepted it")
+            return jsonify({"reason": "db did not accepted it"}), 400
 
         response = {
             "login": new_user.login,
@@ -118,3 +118,27 @@ class UpdateProfile(MethodView):
             response["image"] = new_user.image
 
         return response, 200
+
+
+@blp.route("/me/updatePassword")
+class ChangePassword(MethodView):
+    @blp.arguments(ChangePasswordSchema)
+    @jwt_required()
+    def post(self, request):
+        jwt_id = get_jwt_identity()
+        jti = get_jwt()["jti"]
+
+        user = UserModel.query.filter(UserModel.id == jwt_id).first()
+
+        if user and pbkdf2_sha256.verify(request["oldPassword"], user.password):
+            BLOCKLIST.add(jti)
+            user.password = pbkdf2_sha256.hash(request["newPassword"])
+            try:
+                db.session.add(user)
+                db.session.commit()
+                return jsonify({"status": "ok"}), 200
+            except Exception as e:
+                db.session.rollback()
+                return jsonify({"reason": "db did not accepted it"}), 400
+        else:
+            return jsonify({"message": "Пароли не сходятся"}), 403
